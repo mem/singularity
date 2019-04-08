@@ -20,7 +20,7 @@ import (
 	"github.com/sylabs/singularity/internal/pkg/runtime/engines/oci"
 	ociserver "github.com/sylabs/singularity/internal/pkg/runtime/engines/oci/rpc/server"
 	"github.com/sylabs/singularity/internal/pkg/runtime/engines/singularity"
-	singularityConfig "github.com/sylabs/singularity/internal/pkg/runtime/engines/singularity/config"
+	singularityConfig "github.com/sylabs/singularity/pkg/runtime/engines/singularity/config"
 	"github.com/sylabs/singularity/internal/pkg/runtime/engines/singularity/rpc/server"
 )
 
