@@ -24,7 +24,7 @@ import (
 var (
 	workpath   = filepath.Join(filepath.SplitList(build.Default.GOPATH)[0], repo)
 	trimpath   = filepath.Dir(workpath)
-	mangenpath = filepath.Join(workpath, "cmd/plugin_manifestgen/")
+	mangenpath = "./cmd/plugin_manifestgen/"
 )
 
 const (
@@ -75,7 +75,9 @@ func CompilePlugin(sourceDir, destSif, buildTags string) error {
 // This function essentially runs the `go build -buildmode=plugin [...]` command
 func buildPlugin(sourceDir, buildTags string) (string, error) {
 	// assuming that sourceDir is within trimpath for now
-	out := pluginObjPath(sourceDir)
+	out := "plugin.so"
+	wd, _ := os.Getwd()
+	trimpath = wd
 
 	goTool, err := exec.LookPath("go")
 	if err != nil {
@@ -86,17 +88,18 @@ func buildPlugin(sourceDir, buildTags string) (string, error) {
 		"build",
 		"-o", out,
 		"-buildmode=plugin",
+		"-mod=vendor",
 		"-tags", buildTags,
 		fmt.Sprintf("-gcflags=all=-trimpath=%s", trimpath),
 		fmt.Sprintf("-asmflags=all=-trimpath=%s", trimpath),
-		sourceDir,
+		"test-plugin",
 	}
 
 	sylog.Debugf("Runnig: %s %s", goTool, strings.Join(args, " "))
 
 	buildcmd := exec.Command(goTool, args...)
 
-	buildcmd.Dir = workpath
+	buildcmd.Dir = wd
 	buildcmd.Stderr = os.Stderr
 	buildcmd.Stdout = os.Stdout
 	buildcmd.Stdin = os.Stdin
@@ -108,8 +111,10 @@ func buildPlugin(sourceDir, buildTags string) (string, error) {
 // generateManifest takes the path to the plugin source, sourceDir, and generates
 // its corresponding manifest file.
 func generateManifest(sourceDir, buildTags string) (string, error) {
-	in := pluginObjPath(sourceDir)
-	out := pluginManifestPath(sourceDir)
+	in := "plugin.so"
+	out := "plugin.manifest"
+	wd, _ := os.Getwd()
+	trimpath = wd
 
 	goTool, err := exec.LookPath("go")
 	if err != nil {
@@ -118,6 +123,7 @@ func generateManifest(sourceDir, buildTags string) (string, error) {
 
 	args := []string{
 		"run",
+		"-mod=vendor",
 		"-tags", buildTags,
 		fmt.Sprintf("-gcflags=all=-trimpath=%s", trimpath),
 		fmt.Sprintf("-asmflags=all=-trimpath=%s", trimpath),
@@ -128,10 +134,11 @@ func generateManifest(sourceDir, buildTags string) (string, error) {
 
 	gencmd := exec.Command(goTool, args...)
 
-	gencmd.Dir = workpath
+	gencmd.Dir = wd
 	gencmd.Stderr = os.Stderr
 	gencmd.Stdout = os.Stdout
 	gencmd.Stdin = os.Stdin
+	gencmd.Env = append(os.Environ(), "GO111MODULE=on")
 
 	return out, gencmd.Run()
 }
@@ -140,14 +147,14 @@ func generateManifest(sourceDir, buildTags string) (string, error) {
 // and sifPath, the path to the final .sif file which is ready to be used
 func makeSIF(sourceDir, sifPath string) error {
 	plCreateInfo := sif.CreateInfo{
-		Pathname:   sifPath,
+		Pathname:   "plugin.sif",
 		Launchstr:  sif.HdrLaunch,
 		Sifversion: sif.HdrVersion,
 		ID:         uuid.NewV4(),
 	}
 
 	// create plugin object file descriptor
-	plObjInput, err := getPluginObjDescr(pluginObjPath(sourceDir))
+	plObjInput, err := getPluginObjDescr("plugin.so")
 	if err != nil {
 		return err
 	}
@@ -160,7 +167,7 @@ func makeSIF(sourceDir, sifPath string) error {
 	plCreateInfo.InputDescr = append(plCreateInfo.InputDescr, plObjInput)
 
 	// create plugin manifest descriptor
-	plManifestInput, err := getPluginManifestDescr(pluginManifestPath(sourceDir))
+	plManifestInput, err := getPluginManifestDescr("plugin.manifest")
 	if err != nil {
 		return err
 	}
