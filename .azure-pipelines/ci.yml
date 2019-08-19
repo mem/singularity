@@ -1,0 +1,118 @@
+# Go
+# Build your Go project.
+# Add steps that test, save build artifacts, deploy, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/go
+
+
+trigger:
+- master
+
+resources:
+  containers:
+  - container: ubuntu_1604
+    image: sylabsio/buildenv:ubuntu-16.04-201910101738
+    options: --privileged
+  - container: ubuntu_1804
+    image: sylabsio/buildenv:ubuntu-18.04-201910101738
+    options: --privileged
+  - container: centos_6
+    image: sylabsio/buildenv:centos-6-201910101738
+    options: --privileged
+  - container: centos_7
+    image: sylabsio/buildenv:centos-7-201910101738
+    options: --privileged
+  - container: centos_8
+    image: sylabsio/buildenv:centos-8-201910101738
+    options: --privileged
+
+jobs:
+- job: linux
+  pool:
+    vmImage: 'ubuntu-16.04'
+
+  strategy:
+    matrix:
+      ubuntu-16.04+go-1.13:
+        containerId: ubuntu_1604
+        goVersion: go-1.13
+      ubuntu-18.04+go-1.13:
+        containerId: ubuntu_1804
+        goVersion: go-1.13
+      centos-6+go-1.13:
+        containerId: centos_6
+        goVersion: go-1.13
+      centos-7+go-1.13:
+        containerId: centos_7
+        goVersion: go-1.13
+      centos-8+go-1.13:
+        containerId: centos_8
+        goVersion: go-1.13
+
+  container: $[ variables['containerId'] ]
+
+  variables:
+    GO111MODULE: 'on'
+    GOBIN:  '$(GOPATH)/bin' # Go binaries path
+    GOCACHE: '$(system.defaultWorkingDirectory)/cache' # Go build cache
+    GOPATH: '$(system.defaultWorkingDirectory)/gopath' # Go workspace path
+    GOROOT: '/usr/local/$(GOVERSION)' # Go installation path
+    GOVERSION: $[ variables['goVersion'] ]
+    PATH: '$(GOROOT)/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+    modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)' # Path to the module's code
+    tmpInstallDir: '$(modulePath)/tmp' # Path to temporary installation directory
+
+  steps:
+  - script: |
+      test -e /etc/os-release && cat /etc/os-release
+      mkdir -p '$(GOBIN)'
+      mkdir -p '$(GOPATH)/pkg'
+      mkdir -p '$(modulePath)'
+      shopt -s extglob
+      shopt -s dotglob
+      mv !(gopath) '$(modulePath)'
+      echo '##vso[task.prependpath]$(GOBIN)'
+      echo '##vso[task.prependpath]$(GOROOT)/bin'
+      echo '##vso[task.prependpath]$(tmpInstallDir)'
+      # the / directory is owned by vsts by default, fix this
+      sudo chown root:root /
+      # /tmp needs to be something that can be used as a overlayfs lowerdir
+      sudo mount -t tmpfs tmpfs /tmp
+    displayName: 'Initial setup'
+
+  - script:
+      ./mconfig -v --prefix='$(tmpInstallDir)'
+    workingDirectory: '$(modulePath)'
+    displayName: 'Configure'
+
+  - script: |
+      make -C builddir codegen
+    workingDirectory: '$(modulePath)'
+    displayName: 'Code generation'
+
+  - script:
+      make check
+    workingDirectory: '$(modulePath)/builddir'
+    displayName: 'Lint'
+
+  - script:
+      make
+    workingDirectory: '$(modulePath)/builddir'
+    displayName: 'Build'
+
+  - script:
+      sudo make install
+    workingDirectory: '$(modulePath)/builddir'
+    displayName: 'Install'
+
+  - script:
+      make unit-test JUNIT_OUTPUT=yes
+    continueOnError: true
+    workingDirectory: '$(modulePath)/builddir'
+    displayName: 'Unit test'
+
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFormat: 'JUnit'
+      testResultsFiles: 'unit-test.xml'
+      searchFolder: '$(modulePath)/builddir'
+      failTaskOnFailedTests: true

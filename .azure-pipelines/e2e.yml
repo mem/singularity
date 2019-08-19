@@ -1,0 +1,101 @@
+# Go
+# Build your Go project.
+# Add steps that test, save build artifacts, deploy, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/go
+
+
+trigger:
+- master
+
+resources:
+  containers:
+  - container: ubuntu_1604
+    image: sylabsio/buildenv:ubuntu-16.04-201910090219
+    options: --privileged
+  - container: centos_7
+    image: sylabsio/buildenv:centos-7-201910090219
+    options: --privileged
+
+jobs:
+- job: linux
+  pool:
+    vmImage: 'ubuntu-16.04'
+
+  strategy:
+    matrix:
+      ubuntu-16.04+go-1.13:
+        containerId: ubuntu_1604
+        goVersion: go-1.13
+      centos-7+go-1.13:
+        containerId: centos_7
+        goVersion: go-1.13
+
+  container: $[ variables['containerId'] ]
+
+  variables:
+    GO111MODULE: 'on'
+    GOBIN:  '$(GOPATH)/bin' # Go binaries path
+    GOCACHE: '$(system.defaultWorkingDirectory)/cache' # Go build cache
+    GOPATH: '$(system.defaultWorkingDirectory)/gopath' # Go workspace path
+    GOROOT: '/usr/local/$(GOVERSION)' # Go installation path
+    GOVERSION: $[ variables['goVersion'] ]
+    PATH: '$(GOROOT)/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+    modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)' # Path to the module's code
+    tmpInstallDir: '$(system.defaultWorkingDirectory)/tmp' # Path to temporary installation directory
+
+  steps:
+  - script: |
+      test -e /etc/os-release && cat /etc/os-release
+      mkdir -p '$(GOBIN)'
+      mkdir -p '$(GOPATH)/pkg'
+      mkdir -p '$(modulePath)'
+      shopt -s extglob
+      shopt -s dotglob
+      mv !(gopath) '$(modulePath)'
+      echo '##vso[task.prependpath]$(GOBIN)'
+      echo '##vso[task.prependpath]$(GOROOT)/bin'
+      echo '##vso[task.prependpath]$(tmpInstallDir)'
+      # the / directory is owned by vsts by default, fix this
+      sudo chown root:root /
+      # /tmp needs to be something that can be used as a overlayfs lowerdir
+      sudo mount -t tmpfs tmpfs /tmp
+      # TODO(mem): this is a little hacky, as it's not taking into
+      # account whether the existing mappings overlap with the specified
+      # range.
+      grep -q "^`whoami`:" /etc/subuid || echo "`whoami`:900000:65536" | sudo tee -a /etc/subuid
+      grep -q "^`whoami`:" /etc/subgid || echo "`whoami`:900000:65536" | sudo tee -a /etc/subgid
+    displayName: 'Initial setup'
+
+  - script:
+      ./mconfig -v --prefix='$(tmpInstallDir)'
+    workingDirectory: '$(modulePath)'
+    displayName: 'Configure'
+
+  - script: |
+      make -C builddir '$(modulePath)/scripts/go-generate'
+      scripts/go-generate -x ./...
+    workingDirectory: '$(modulePath)'
+    displayName: 'Code generation'
+
+  - script:
+      make
+    workingDirectory: '$(modulePath)/builddir'
+    displayName: 'Build'
+
+  - script:
+      sudo make install
+    workingDirectory: '$(modulePath)/builddir'
+    displayName: 'Install'
+
+  - script:
+      make e2e-test JUNIT_OUTPUT=yes
+    continueOnError: true
+    workingDirectory: '$(modulePath)/builddir'
+    displayName: 'E2E test'
+
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFormat: 'JUnit'
+      testResultsFiles: 'e2e-test.xml'
+      searchFolder: '$(modulePath)/builddir'
+      failTaskOnFailedTests: true
