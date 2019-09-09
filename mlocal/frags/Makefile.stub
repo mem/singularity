@@ -42,7 +42,7 @@ unit-test:
 	$(V)cd $(SOURCEDIR) && \
 		sudo -E \
 		env PATH='$(BINDIR):$(PATH)' \
-		scripts/go-test -v $(EXTRA_FLAGS) \
+		scripts/go-test -v -short $(EXTRA_FLAGS) \
 		./...
 	@echo "       PASS"
 
