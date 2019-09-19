@@ -56,6 +56,7 @@ func (c imgBuildTests) buildFrom(t *testing.T) {
 		name       string
 		dependency string
 		buildSpec  string
+		skip       string
 	}{
 		{
 			name:      "BusyBox",
@@ -65,6 +66,7 @@ func (c imgBuildTests) buildFrom(t *testing.T) {
 			name:       "Debootstrap",
 			dependency: "debootstrap",
 			buildSpec:  "../examples/debian/Singularity",
+			skip:       "disabled until fixed", // TODO(mem): reenable this
 		},
 		{
 			name:      "DockerURI",
@@ -74,16 +76,16 @@ func (c imgBuildTests) buildFrom(t *testing.T) {
 			name:      "DockerDefFile",
 			buildSpec: "../examples/docker/Singularity",
 		},
-		// TODO(mem): reenable this; disabled while shub is down
-		// {
-		// 	name:       "ShubURI",
-		// 	buildSpec:  "shub://GodloveD/busybox",
-		// },
-		// TODO(mem): reenable this; disabled while shub is down
-		// {
-		// 	name:       "ShubDefFile",
-		// 	buildSpec:  "../examples/shub/Singularity",
-		// },
+		{
+			name:      "ShubURI",
+			buildSpec: "shub://GodloveD/busybox",
+			skip:      "disabled until we can rate limit", // TODO(mem): reenable this
+		},
+		{
+			name:      "ShubDefFile",
+			buildSpec: "../examples/shub/Singularity",
+			skip:      "disabled until we can rate limit", // TODO(mem): reenable this
+		},
 		{
 			name:      "LibraryDefFile",
 			buildSpec: "../examples/library/Singularity",
@@ -101,6 +103,7 @@ func (c imgBuildTests) buildFrom(t *testing.T) {
 			name:       "Zypper",
 			dependency: "zypper",
 			buildSpec:  "../examples/opensuse/Singularity",
+			skip:       "disabled until fixed", // TODO(mem): reenable this
 		},
 	}
 
@@ -126,6 +129,10 @@ func (c imgBuildTests) buildFrom(t *testing.T) {
 					e2e.WithCommand("build"),
 					e2e.WithArgs(args...),
 					e2e.PreRun(func(t *testing.T) {
+						if tc.skip != "" {
+							t.Skipf("%s", tc.skip)
+						}
+
 						if tc.dependency == "" {
 							return
 						}
