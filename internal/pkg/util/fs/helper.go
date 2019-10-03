@@ -9,11 +9,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/sylabs/singularity/internal/pkg/sylog"
 	"golang.org/x/sys/unix"
@@ -202,6 +204,25 @@ func MakeTmpFile(basedir, pattern string, mode os.FileMode) (*os.File, error) {
 		return nil, fmt.Errorf("failed to change permission of %s: %s", f.Name(), err)
 	}
 	return f, nil
+}
+
+// RandomStr returns a random string with the specified length.
+// If the length is 0 or less, it will default to 8.
+func RandomStr(length int) string {
+	rand.Seed(time.Now().UnixNano())
+
+	validChars := []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+
+	if length <= 0 {
+		length = 8
+	}
+
+	var b strings.Builder
+	for i := 0; i < length; i++ {
+		b.WriteRune(validChars[rand.Intn(len(validChars))])
+	}
+
+	return b.String()
 }
 
 // PathExists simply checks if a path exists.
