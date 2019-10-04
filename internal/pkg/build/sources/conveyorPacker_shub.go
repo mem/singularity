@@ -49,7 +49,7 @@ func (cp *ShubConveyorPacker) Get(ctx context.Context, b *types.Bundle) (err err
 	}
 
 	// get image from singularity hub
-	if err := shub.DownloadImage(manifest, f.Name(), src, true, cp.b.Opts.NoHTTPS); err != nil {
+	if err := shub.DownloadImage(ctx, manifest, f.Name(), src, true, cp.b.Opts.NoHTTPS); err != nil {
 		return fmt.Errorf("unable to get image from: %s: %v", src, err)
 	}
 

@@ -99,7 +99,9 @@ func (l *Library) Pull(ctx context.Context, from, to, arch string) error {
 // will be saved to the location provided.
 func (l *Library) pullAndVerify(ctx context.Context, imgMeta *scs.Image, from, to, arch string) error {
 	sylog.Infof("Downloading library image")
-	go interruptCleanup(to)
+	done := make(chan struct{})
+	defer func() { close(done) }()
+	go interruptCleanup(ctx, done, to)
 
 	err := library.DownloadImage(ctx, l.client, to, arch, from, printProgress)
 	if err != nil {

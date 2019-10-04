@@ -241,7 +241,7 @@ func handleLibrary(ctx context.Context, imgCache *cache.Handle, u, libraryURL st
 	return imagePath, nil
 }
 
-func handleShub(imgCache *cache.Handle, u string) (string, error) {
+func handleShub(ctx context.Context, imgCache *cache.Handle, u string) (string, error) {
 	imagePath := ""
 
 	shubURI, err := shub.ShubParseReference(u)
@@ -263,7 +263,7 @@ func handleShub(imgCache *cache.Handle, u string) (string, error) {
 		imagePath = file.Name()
 
 		sylog.Infof("Downloading shub image")
-		err = shub.DownloadImage(manifest, imagePath, u, true, noHTTPS)
+		err = shub.DownloadImage(ctx, manifest, imagePath, u, true, noHTTPS)
 		if err != nil {
 			sylog.Fatalf("%v\n", err)
 		}
@@ -277,7 +277,7 @@ func handleShub(imgCache *cache.Handle, u string) (string, error) {
 		}
 		if !exists {
 			sylog.Infof("Downloading shub image")
-			err := shub.DownloadImage(manifest, imagePath, u, true, noHTTPS)
+			err := shub.DownloadImage(ctx, manifest, imagePath, u, true, noHTTPS)
 			if err != nil {
 				sylog.Fatalf("%v\n", err)
 			}
@@ -289,7 +289,7 @@ func handleShub(imgCache *cache.Handle, u string) (string, error) {
 	return imagePath, nil
 }
 
-func handleNet(imgCache *cache.Handle, u string) (string, error) {
+func handleNet(ctx context.Context, imgCache *cache.Handle, u string) (string, error) {
 	refParts := strings.Split(u, "/")
 	imageName := refParts[len(refParts)-1]
 	imagePath := imgCache.NetImage("hash", imageName)
@@ -300,7 +300,7 @@ func handleNet(imgCache *cache.Handle, u string) (string, error) {
 	}
 	if !exists {
 		sylog.Infof("Downloading network image")
-		err := net.DownloadImage(imagePath, u)
+		err := net.DownloadImage(ctx, imagePath, u)
 		if err != nil {
 			sylog.Fatalf("%v\n", err)
 		}
@@ -329,13 +329,13 @@ func replaceURIWithImage(ctx context.Context, imgCache *cache.Handle, cmd *cobra
 	case uri.Oras:
 		image, err = handleOras(ctx, imgCache, cmd, args[0])
 	case uri.Shub:
-		image, err = handleShub(imgCache, args[0])
+		image, err = handleShub(ctx, imgCache, args[0])
 	case ociclient.IsSupported(t):
 		image, err = handleOCI(ctx, imgCache, cmd, args[0])
 	case uri.HTTP:
-		image, err = handleNet(imgCache, args[0])
+		image, err = handleNet(ctx, imgCache, args[0])
 	case uri.HTTPS:
-		image, err = handleNet(imgCache, args[0])
+		image, err = handleNet(ctx, imgCache, args[0])
 	default:
 		sylog.Fatalf("Unsupported transport type: %s", t)
 	}

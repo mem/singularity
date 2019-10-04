@@ -348,7 +348,7 @@ func getSigsForSelection(fimg *sif.FileImage, id uint32, isGroup bool) (sigs []*
 func IsSigned(ctx context.Context, cpath, keyServerURI string, id uint32, isGroup bool, authToken string) (bool, error) {
 	_, noLocalKey, err := Verify(ctx, cpath, keyServerURI, id, isGroup, authToken, false, false)
 	if err != nil {
-		return false, fmt.Errorf("unable to verify container: %s", cpath)
+		return false, fmt.Errorf("unable to verify container %s: %s", cpath, err)
 	}
 	if noLocalKey {
 		sylog.Warningf("Container might not be trusted; run 'singularity verify %s' to show who signed it", cpath)

@@ -7,6 +7,7 @@ package cli
 
 import (
 	"context"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -166,7 +167,27 @@ var PullCmd = &cobra.Command{
 }
 
 func pullRun(cmd *cobra.Command, args []string) {
-	ctx := context.TODO()
+	ctx, cancel := context.WithCancel(context.Background())
+
+	signalCh := make(chan os.Signal)
+	signal.Notify(signalCh, os.Interrupt, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGKILL)
+
+	defer func() {
+		sylog.Debugf("Done. Cleaning up.")
+		signal.Stop(signalCh)
+		cancel()
+	}()
+
+	go func() {
+		select {
+		case <-signalCh:
+			sylog.Debugf("Got cancellation signal, propagating cancellation.")
+			cancel()
+
+		case <-ctx.Done():
+			sylog.Debugf("Request context done.")
+		}
+	}()
 
 	imgCache := getCacheHandle(cache.Config{Disable: disableCache})
 	if imgCache == nil {
@@ -195,27 +216,52 @@ func pullRun(cmd *cobra.Command, args []string) {
 		pullTo = filepath.Join(pullDir, pullTo)
 	}
 
-	_, err := os.Stat(pullTo)
+	tmpFile, err := ioutil.TempFile(filepath.Dir(pullTo), "")
+	if err != nil {
+		sylog.Errorf("Cannot create temporary file for download: %s", err)
+		return
+	}
+
+	tmpDst := tmpFile.Name()
+
+	// FIXME(mem): this is a bad use of the API, it's not only
+	// necessary to close the file handle, but it's also necessary
+	// to remove it before proceding because some of the functions
+	// error out if the file already exists.
+	tmpFile.Close()
+	os.Remove(tmpDst)
+
+	sylog.Debugf("Downloading image to temporary location %s", tmpDst)
+
+	_, err = os.Stat(pullTo)
 	if !os.IsNotExist(err) {
 		// image already exists
 		if !forceOverwrite {
-			sylog.Fatalf("Image file already exists: %q - will not overwrite", pullTo)
+			sylog.Errorf("Image file already exists: %q - will not overwrite", pullTo)
+			return
 		}
 		sylog.Debugf("Removing overridden file: %s", pullTo)
 		if err := os.Remove(pullTo); err != nil {
-			sylog.Fatalf("Unable to remove %q: %s", pullTo, err)
+			sylog.Errorf("Unable to remove %q: %s", pullTo, err)
+			return
 		}
 	}
 
 	// monitor for OS signals and remove invalid file
-	c := make(chan os.Signal)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func(fileName string) {
-		<-c
-		sylog.Debugf("Removing incomplete file because of receiving Termination signal")
-		os.Remove(fileName)
-		os.Exit(1)
-	}(pullTo)
+	go func(fn string) {
+		<-ctx.Done()
+
+		switch err := os.Remove(fn); {
+		case os.IsNotExist(err):
+			sylog.Debugf("Temporary file %s not found", fn)
+
+		case err == nil:
+			sylog.Debugf("Removed temporary file %s", fn)
+
+		default:
+			sylog.Debugf("Cannot remove temporary file %s", fn)
+		}
+	}(tmpDst)
 
 	switch transport {
 	case LibraryProtocol, "":
@@ -227,48 +273,67 @@ func pullRun(cmd *cobra.Command, args []string) {
 		}
 		lib, err := singularity.NewLibrary(libraryConfig, imgCache, keyServerURL)
 		if err != nil {
-			sylog.Fatalf("Could not initialize library: %v", err)
+			sylog.Errorf("Could not initialize library: %v", err)
+			return
 		}
 
-		err = lib.Pull(ctx, pullFrom, pullTo, pullArch)
+		err = lib.Pull(ctx, pullFrom, tmpDst, pullArch)
 		if err != nil && err != singularity.ErrLibraryPullUnsigned {
-			sylog.Fatalf("While pulling library image: %v", err)
+			sylog.Errorf("While pulling library image: %v", err)
+			return
 		}
 		if err == singularity.ErrLibraryPullUnsigned {
 			sylog.Warningf("Skipping container verification")
 		}
+
 	case ShubProtocol:
-		err := singularity.PullShub(imgCache, pullTo, pullFrom, noHTTPS)
+		err := singularity.PullShub(ctx, imgCache, tmpDst, pullFrom, noHTTPS)
 		if err != nil {
-			sylog.Fatalf("While pulling shub image: %v\n", err)
+			sylog.Errorf("While pulling shub image: %v\n", err)
+			return
 		}
+
 	case OrasProtocol:
 		ociAuth, err := makeDockerCredentials(cmd)
 		if err != nil {
-			sylog.Fatalf("Unable to make docker oci credentials: %s", err)
+			sylog.Errorf("Unable to make docker oci credentials: %s", err)
+			return
 		}
 
-		err = singularity.OrasPull(ctx, imgCache, pullTo, ref, forceOverwrite, &ociAuth)
+		err = singularity.OrasPull(ctx, imgCache, tmpDst, ref, forceOverwrite, &ociAuth)
 		if err != nil {
-			sylog.Fatalf("While pulling image from oci registry: %v", err)
+			sylog.Errorf("While pulling image from oci registry: %v", err)
+			return
 		}
+
 	case HTTPProtocol, HTTPSProtocol:
-		err := net.DownloadImage(pullTo, pullFrom)
+		err := net.DownloadImage(ctx, tmpDst, pullFrom)
 		if err != nil {
-			sylog.Fatalf("While pulling from image from http(s): %v\n", err)
+			sylog.Errorf("While pulling from image from http(s): %v\n", err)
+			return
 		}
+
 	case ociclient.IsSupported(transport):
 		ociAuth, err := makeDockerCredentials(cmd)
 		if err != nil {
-			sylog.Fatalf("While creating Docker credentials: %v", err)
+			sylog.Errorf("While creating Docker credentials: %v", err)
+			return
 		}
 
-		err = singularity.OciPull(ctx, imgCache, pullTo, pullFrom, tmpDir, &ociAuth, noHTTPS, buildArgs.noCleanUp)
+		err = singularity.OciPull(ctx, imgCache, tmpDst, pullFrom, tmpDir, &ociAuth, noHTTPS, buildArgs.noCleanUp)
 		if err != nil {
-			sylog.Fatalf("While making image from oci registry: %v", err)
+			sylog.Errorf("While making image from oci registry: %v", err)
+			return
 		}
+
 	default:
-		sylog.Fatalf("Unsupported transport type: %s", transport)
+		sylog.Errorf("Unsupported transport type: %s", transport)
+		return
+	}
+
+	sylog.Debugf("Renaming temporary filename %s to %s", tmpDst, pullTo)
+	if err := os.Rename(tmpDst, pullTo); err != nil {
+		sylog.Debugf("Error while renaming temporary filename %s to %s", tmpDst, pullTo)
 	}
 }
 

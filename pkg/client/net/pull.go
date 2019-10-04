@@ -7,6 +7,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -32,7 +33,7 @@ func IsNetPullRef(libraryRef string) bool {
 
 // DownloadImage will retrieve an image from the Container Library,
 // saving it into the specified file
-func DownloadImage(filePath string, libraryURL string) error {
+func DownloadImage(ctx context.Context, filePath string, libraryURL string) error {
 
 	if !IsNetPullRef(libraryURL) {
 		return fmt.Errorf("not a valid url reference: %s", libraryURL)
@@ -54,6 +55,8 @@ func DownloadImage(filePath string, libraryURL string) error {
 	if err != nil {
 		return err
 	}
+
+	req = req.WithContext(ctx)
 
 	req.Header.Set("User-Agent", useragent.Value())
 

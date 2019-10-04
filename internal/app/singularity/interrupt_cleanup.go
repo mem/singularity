@@ -6,25 +6,26 @@
 package singularity
 
 import (
+	"context"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/sylabs/singularity/internal/pkg/sylog"
 )
 
 // interruptCleanup will watch for a interrupt signal, if there's
 // one detected, then it will remove all the specified file(s)
-func interruptCleanup(files ...string) {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	<-c
-	for _, f := range files {
-		sylog.Debugf("Removing file: %q because of receiving termination signal", f)
-		err := os.Remove(f)
-		if !os.IsNotExist(err) && err != nil {
-			sylog.Errorf("unable to remove: %s: %v", f, err)
+func interruptCleanup(ctx context.Context, done <-chan struct{}, files ...string) {
+	select {
+	case <-ctx.Done():
+		for _, f := range files {
+			sylog.Debugf("Removing file: %q because of receiving termination signal", f)
+			err := os.Remove(f)
+			if !os.IsNotExist(err) && err != nil {
+				sylog.Errorf("unable to remove: %s: %v", f, err)
+			}
 		}
+		os.Exit(1)
+
+	case <-done:
 	}
-	os.Exit(1)
 }

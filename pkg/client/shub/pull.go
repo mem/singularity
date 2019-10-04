@@ -6,6 +6,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,7 +24,7 @@ const pullTimeout = 7200
 
 // DownloadImage image will download a shub image to a path. This will not try
 // to cache it, or use cache.
-func DownloadImage(manifest ShubAPIResponse, filePath, shubRef string, force, noHTTPS bool) error {
+func DownloadImage(ctx context.Context, manifest ShubAPIResponse, filePath, shubRef string, force, noHTTPS bool) error {
 	sylog.Debugf("Downloading container from Shub")
 	if !force {
 		if _, err := os.Stat(filePath); err == nil {
@@ -55,6 +56,7 @@ func DownloadImage(manifest ShubAPIResponse, filePath, shubRef string, force, no
 	if err != nil {
 		return err
 	}
+	req = req.WithContext(ctx)
 	req.Header.Set("User-Agent", useragent.Value())
 
 	if noHTTPS {

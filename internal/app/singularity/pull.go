@@ -31,7 +31,7 @@ var (
 
 // PullShub will download a image from shub, and cache it. Next time
 // that container is downloaded this will just use that cached image.
-func PullShub(imgCache *cache.Handle, filePath string, shubRef string, noHTTPS bool) (err error) {
+func PullShub(ctx context.Context, imgCache *cache.Handle, filePath string, shubRef string, noHTTPS bool) (err error) {
 	shubURI, err := shub.ShubParseReference(shubRef)
 	if err != nil {
 		return fmt.Errorf("failed to parse shub uri: %s", err)
@@ -48,7 +48,7 @@ func PullShub(imgCache *cache.Handle, filePath string, shubRef string, noHTTPS b
 
 	if imgCache.IsDisabled() {
 		// Dont use cached image
-		if err := shub.DownloadImage(manifest, filePath, shubRef, true, noHTTPS); err != nil {
+		if err := shub.DownloadImage(ctx, manifest, filePath, shubRef, true, noHTTPS); err != nil {
 			return err
 		}
 	} else {
@@ -58,9 +58,11 @@ func PullShub(imgCache *cache.Handle, filePath string, shubRef string, noHTTPS b
 		}
 		if !exists {
 			sylog.Infof("Downloading shub image")
-			go interruptCleanup(imagePath)
+			done := make(chan struct{})
+			defer func() { close(done) }()
+			go interruptCleanup(ctx, done, imagePath)
 
-			err := shub.DownloadImage(manifest, imagePath, shubRef, true, noHTTPS)
+			err := shub.DownloadImage(ctx, manifest, imagePath, shubRef, true, noHTTPS)
 			if err != nil {
 				return err
 			}
@@ -136,7 +138,9 @@ func OrasPull(ctx context.Context, imgCache *cache.Handle, name, ref string, for
 
 	if !exists {
 		sylog.Infof("Downloading image with ORAS")
-		go interruptCleanup(cacheImagePath)
+		done := make(chan struct{})
+		defer func() { close(done) }()
+		go interruptCleanup(ctx, done, cacheImagePath)
 
 		if err := oras.DownloadImage(cacheImagePath, ref, ociAuth); err != nil {
 			return fmt.Errorf("unable to Download Image: %v", err)
@@ -201,7 +205,9 @@ func OciPull(ctx context.Context, imgCache *cache.Handle, name, imageURI, tmpDir
 		}
 		if !exists {
 			sylog.Infof("Converting OCI blobs to SIF format")
-			go interruptCleanup(imgName)
+			done := make(chan struct{})
+			defer func() { close(done) }()
+			go interruptCleanup(ctx, done, imgName)
 
 			if err := convertDockerToSIF(ctx, imgCache, imageURI, cachedImgPath, tmpDir, noHTTPS, noCleanUp, ociAuth); err != nil {
 				return fmt.Errorf("while building SIF from layers: %v", err)
