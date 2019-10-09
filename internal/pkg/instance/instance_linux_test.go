@@ -215,6 +215,8 @@ func TestAdd(t *testing.T) {
 }
 
 func TestGet(t *testing.T) {
+	t.Skipf("Skip until fixed: this test depends on other tests running before it")
+
 	test.EnsurePrivilege(t)
 
 	for _, e := range instanceTests {
