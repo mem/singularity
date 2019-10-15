@@ -241,11 +241,8 @@ func pullRun(cmd *cobra.Command, args []string) {
 			sylog.Errorf("Image file already exists: %q - will not overwrite", pullTo)
 			return
 		}
-		sylog.Debugf("Removing overridden file: %s", pullTo)
-		if err := os.Remove(pullTo); err != nil {
-			sylog.Errorf("Unable to remove %q: %s", pullTo, err)
-			return
-		}
+		// do not remove yet, wait until we have actually
+		// downloaded the image.
 	}
 
 	// monitor for OS signals and remove invalid file
@@ -341,6 +338,20 @@ func pullRun(cmd *cobra.Command, args []string) {
 	default:
 		sylog.Errorf("Unsupported transport type: %s", transport)
 		return
+	}
+
+	_, err = os.Stat(pullTo)
+	if !os.IsNotExist(err) {
+		// image showed up since the last time we checked
+		if !forceOverwrite {
+			sylog.Errorf("Image file already exists: %q - will not overwrite", pullTo)
+			return
+		}
+		sylog.Debugf("Removing overridden file: %s", pullTo)
+		if err := os.Remove(pullTo); err != nil {
+			sylog.Errorf("Unable to remove %q: %s", pullTo, err)
+			return
+		}
 	}
 
 	sylog.Debugf("Renaming temporary filename %s to %s", tmpDst, pullTo)
