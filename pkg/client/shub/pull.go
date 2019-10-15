@@ -7,6 +7,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,13 +25,8 @@ const pullTimeout = 7200
 
 // DownloadImage image will download a shub image to a path. This will not try
 // to cache it, or use cache.
-func DownloadImage(ctx context.Context, manifest ShubAPIResponse, filePath, shubRef string, force, noHTTPS bool) error {
+func DownloadImage(ctx context.Context, manifest ShubAPIResponse, filePath, shubRef string, noHTTPS bool) error {
 	sylog.Debugf("Downloading container from Shub")
-	if !force {
-		if _, err := os.Stat(filePath); err == nil {
-			return fmt.Errorf("image file already exists: %q - will not overwrite", filePath)
-		}
-	}
 
 	// use custom parser to make sure we have a valid shub URI
 	if ok := isShubPullRef(shubRef); !ok {
@@ -52,11 +48,10 @@ func DownloadImage(ctx context.Context, manifest ShubAPIResponse, filePath, shub
 		Timeout: pullTimeout * time.Second,
 	}
 
-	req, err := http.NewRequest(http.MethodGet, manifest.Image, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifest.Image, nil)
 	if err != nil {
 		return err
 	}
-	req = req.WithContext(ctx)
 	req.Header.Set("User-Agent", useragent.Value())
 
 	if noHTTPS {
@@ -65,15 +60,24 @@ func DownloadImage(ctx context.Context, manifest ShubAPIResponse, filePath, shub
 
 	// Do the request, if status isn't success, return error
 	resp, err := httpc.Do(req)
+	switch {
+	case err == nil:
+
+	case errors.Is(err, context.Canceled):
+		return err
+
+	default:
+		return err
+	}
+
+	// XXX(mem): why is this here?
 	if resp == nil {
 		return fmt.Errorf("no response received from singularity hub")
-	}
-	if err != nil {
-		return err
 	}
 	if resp.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("the requested image was not found in singularity hub")
 	}
+
 	sylog.Debugf("%s response received, beginning image download\n", resp.Status)
 
 	if resp.StatusCode != http.StatusOK {
@@ -119,8 +123,6 @@ func DownloadImage(ctx context.Context, manifest ShubAPIResponse, filePath, shub
 	}
 
 	bar.Finish()
-
-	sylog.Debugf("Download complete: %s\n", filePath)
 
 	return nil
 }

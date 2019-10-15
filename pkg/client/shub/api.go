@@ -6,6 +6,7 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,7 +50,7 @@ type ShubAPIResponse struct {
 
 // GetManifest will return the image manifest for a container uri
 // from Singularity Hub.
-func GetManifest(uri ShubURI, noHTTPS bool) (ShubAPIResponse, error) {
+func GetManifest(ctx context.Context, uri ShubURI, noHTTPS bool) (ShubAPIResponse, error) {
 	// Create a new http Hub client
 	httpc := http.Client{
 		Timeout: 30 * time.Second,
@@ -60,16 +61,16 @@ func GetManifest(uri ShubURI, noHTTPS bool) (ShubAPIResponse, error) {
 	}
 
 	// Create the request, add headers context
-	url, err := url.Parse(uri.registry + uri.user + "/" + uri.container + uri.tag + uri.digest)
+	manifestURL, err := url.Parse(uri.registry + uri.user + "/" + uri.container + uri.tag + uri.digest)
 	if err != nil {
 		return ShubAPIResponse{}, err
 	}
 
 	if noHTTPS {
-		url.Scheme = "http"
+		manifestURL.Scheme = "http"
 	}
 
-	req, err := http.NewRequest(http.MethodGet, url.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifestURL.String(), nil)
 	if err != nil {
 		return ShubAPIResponse{}, err
 	}
@@ -79,6 +80,13 @@ func GetManifest(uri ShubURI, noHTTPS bool) (ShubAPIResponse, error) {
 
 	// Do the request, if status isn't success, return error
 	res, err := httpc.Do(req)
+	switch {
+	case err == nil:
+	case errors.Is(err, context.Canceled):
+		return ShubAPIResponse{}, err
+	default:
+		sylog.Debugf("Request response when getting manifest: %q %#[1]v", err)
+	}
 	if res == nil {
 		return ShubAPIResponse{}, fmt.Errorf("no response received from singularity hub")
 	}

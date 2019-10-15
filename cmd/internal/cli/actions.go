@@ -250,7 +250,7 @@ func handleShub(ctx context.Context, imgCache *cache.Handle, u string) (string, 
 	}
 
 	// Get the image manifest
-	manifest, err := shub.GetManifest(shubURI, noHTTPS)
+	manifest, err := shub.GetManifest(ctx, shubURI, noHTTPS)
 	if err != nil {
 		return "", fmt.Errorf("failed to get manifest for: %s: %s", u, err)
 	}
@@ -263,7 +263,7 @@ func handleShub(ctx context.Context, imgCache *cache.Handle, u string) (string, 
 		imagePath = file.Name()
 
 		sylog.Infof("Downloading shub image")
-		err = shub.DownloadImage(ctx, manifest, imagePath, u, true, noHTTPS)
+		err = shub.DownloadImage(ctx, manifest, imagePath, u, noHTTPS)
 		if err != nil {
 			sylog.Fatalf("%v\n", err)
 		}
@@ -277,7 +277,7 @@ func handleShub(ctx context.Context, imgCache *cache.Handle, u string) (string, 
 		}
 		if !exists {
 			sylog.Infof("Downloading shub image")
-			err := shub.DownloadImage(ctx, manifest, imagePath, u, true, noHTTPS)
+			err := shub.DownloadImage(ctx, manifest, imagePath, u, noHTTPS)
 			if err != nil {
 				sylog.Fatalf("%v\n", err)
 			}

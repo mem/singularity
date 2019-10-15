@@ -38,9 +38,15 @@ func PullShub(ctx context.Context, imgCache *cache.Handle, filePath string, shub
 	}
 
 	// Get the image manifest
-	manifest, err := shub.GetManifest(shubURI, noHTTPS)
-	if err != nil {
-		return fmt.Errorf("failed to get manifest for: %s: %s", shubRef, err)
+	manifest, err := shub.GetManifest(ctx, shubURI, noHTTPS)
+	switch {
+	case err == nil:
+
+	case errors.Is(err, context.Canceled):
+		return err
+
+	default:
+		return fmt.Errorf("failed to get manifest for %s: %w", shubRef, err)
 	}
 
 	imageName := uri.GetName(shubRef)
@@ -48,7 +54,7 @@ func PullShub(ctx context.Context, imgCache *cache.Handle, filePath string, shub
 
 	if imgCache.IsDisabled() {
 		// Dont use cached image
-		if err := shub.DownloadImage(ctx, manifest, filePath, shubRef, true, noHTTPS); err != nil {
+		if err := shub.DownloadImage(ctx, manifest, filePath, shubRef, noHTTPS); err != nil {
 			return err
 		}
 	} else {
@@ -58,11 +64,8 @@ func PullShub(ctx context.Context, imgCache *cache.Handle, filePath string, shub
 		}
 		if !exists {
 			sylog.Infof("Downloading shub image")
-			done := make(chan struct{})
-			defer func() { close(done) }()
-			go interruptCleanup(ctx, done, imagePath)
 
-			err := shub.DownloadImage(ctx, manifest, imagePath, shubRef, true, noHTTPS)
+			err := shub.DownloadImage(ctx, manifest, imagePath, shubRef, noHTTPS)
 			if err != nil {
 				return err
 			}

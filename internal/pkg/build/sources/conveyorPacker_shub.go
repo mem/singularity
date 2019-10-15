@@ -43,13 +43,13 @@ func (cp *ShubConveyorPacker) Get(ctx context.Context, b *types.Bundle) (err err
 	}
 
 	// Get the image manifest
-	manifest, err := shub.GetManifest(shubURIRef, cp.b.Opts.NoHTTPS)
+	manifest, err := shub.GetManifest(ctx, shubURIRef, cp.b.Opts.NoHTTPS)
 	if err != nil {
 		return fmt.Errorf("failed to get manifest for: %s: %s", src, err)
 	}
 
 	// get image from singularity hub
-	if err := shub.DownloadImage(ctx, manifest, f.Name(), src, true, cp.b.Opts.NoHTTPS); err != nil {
+	if err := shub.DownloadImage(ctx, manifest, f.Name(), src, cp.b.Opts.NoHTTPS); err != nil {
 		return fmt.Errorf("unable to get image from: %s: %v", src, err)
 	}
 
