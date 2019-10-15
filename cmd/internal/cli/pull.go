@@ -208,13 +208,35 @@ func pullRun(cmd *cobra.Command, args []string) {
 			if transport == "" {
 				pullTo = uri.GetName("library://" + pullFrom)
 			} else {
-				pullTo = uri.GetName(pullFrom) // TODO: If not library/shub & no name specified, simply put to cache
+				// TODO: If not library/shub & no name specified, simply put to cache
+				pullTo = uri.GetName(pullFrom)
 			}
 		}
 	}
 
 	if pullDir != "" {
 		pullTo = filepath.Join(pullDir, pullTo)
+	}
+
+	checkOverwrite := func(filename string) bool {
+		if _, err := os.Stat(filename); os.IsNotExist(err) {
+			return true
+		}
+
+		// image already exists, it was either already here or
+		// it showed up since the last time we checked
+		if !forceOverwrite {
+			sylog.Errorf(`Image file %s already exists, will not overwrite`, filename)
+			return false
+		}
+
+		sylog.Debugf("Overwriting existing file: %s", filename)
+
+		return true
+	}
+
+	if ok := checkOverwrite(pullTo); !ok {
+		return
 	}
 
 	tmpFile, err := ioutil.TempFile(filepath.Dir(pullTo), "")
@@ -234,30 +256,17 @@ func pullRun(cmd *cobra.Command, args []string) {
 
 	sylog.Debugf("Downloading image to temporary location %s", tmpDst)
 
-	_, err = os.Stat(pullTo)
-	if !os.IsNotExist(err) {
-		// image already exists
-		if !forceOverwrite {
-			sylog.Errorf("Image file already exists: %q - will not overwrite", pullTo)
-			return
-		}
-		// do not remove yet, wait until we have actually
-		// downloaded the image.
-	}
-
-	// monitor for OS signals and remove invalid file
-	go func(fn string) {
-		<-ctx.Done()
-
-		switch err := os.Remove(fn); {
+	// remove temporary file when returning
+	defer func(filename string) {
+		switch err := os.Remove(filename); {
 		case os.IsNotExist(err):
-			sylog.Debugf("Temporary file %s not found", fn)
+			sylog.Debugf(`Temporary file "%s" not found`, filename)
 
 		case err == nil:
-			sylog.Debugf("Removed temporary file %s", fn)
+			sylog.Debugf(`Removed temporary file "%s"`, filename)
 
 		default:
-			sylog.Debugf("Cannot remove temporary file %s", fn)
+			sylog.Debugf(`Cannot remove temporary file "%s"`, filename)
 		}
 	}(tmpDst)
 
@@ -340,23 +349,13 @@ func pullRun(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	_, err = os.Stat(pullTo)
-	if !os.IsNotExist(err) {
-		// image showed up since the last time we checked
-		if !forceOverwrite {
-			sylog.Errorf("Image file already exists: %q - will not overwrite", pullTo)
-			return
-		}
-		sylog.Debugf("Removing overridden file: %s", pullTo)
-		if err := os.Remove(pullTo); err != nil {
-			sylog.Errorf("Unable to remove %q: %s", pullTo, err)
-			return
-		}
+	if ok := checkOverwrite(pullTo); !ok {
+		return
 	}
 
 	sylog.Debugf("Renaming temporary filename %s to %s", tmpDst, pullTo)
 	if err := os.Rename(tmpDst, pullTo); err != nil {
-		sylog.Debugf("Error while renaming temporary filename %s to %s", tmpDst, pullTo)
+		sylog.Debugf("Error while renaming temporary filename %s to %s: %s", tmpDst, pullTo, err)
 	}
 
 	sylog.Infof("Download complete: %s\n", pullTo)
