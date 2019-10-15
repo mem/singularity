@@ -25,6 +25,7 @@ import (
 	"github.com/sylabs/singularity/internal/pkg/util/uri"
 	net "github.com/sylabs/singularity/pkg/client/net"
 	"github.com/sylabs/singularity/pkg/cmdline"
+	"github.com/sylabs/singularity/pkg/signing"
 )
 
 const (
@@ -278,12 +279,23 @@ func pullRun(cmd *cobra.Command, args []string) {
 		}
 
 		err = lib.Pull(ctx, pullFrom, tmpDst, pullArch)
-		if err != nil && err != singularity.ErrLibraryPullUnsigned {
+		if err != nil {
 			sylog.Errorf("While pulling library image: %v", err)
 			return
 		}
-		if err == singularity.ErrLibraryPullUnsigned {
-			sylog.Warningf("Skipping container verification")
+
+		if sigType, err := lib.CheckSignature(ctx, tmpDst); err != nil {
+			sylog.Warningf("Cannot verify container %s: %v", pullTo, err)
+			return
+		} else {
+			switch sigType {
+			case signing.NoSignature:
+				sylog.Warningf("Container is not signed, skipping container verification")
+			case signing.RemoteSignature:
+				sylog.Warningf("Signing key is not available locally; run 'singularity verify %s' to show who signed it", pullTo)
+			case signing.LocalSignature:
+				sylog.Infof("Container is trusted - run 'singularity key list' to list your trusted keys")
+			}
 		}
 
 	case ShubProtocol:
@@ -335,6 +347,8 @@ func pullRun(cmd *cobra.Command, args []string) {
 	if err := os.Rename(tmpDst, pullTo); err != nil {
 		sylog.Debugf("Error while renaming temporary filename %s to %s", tmpDst, pullTo)
 	}
+
+	sylog.Infof("Download complete: %s\n", pullTo)
 }
 
 func handlePullFlags(cmd *cobra.Command) {

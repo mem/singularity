@@ -84,14 +84,11 @@ func (l *Library) Pull(ctx context.Context, from, to, arch string) error {
 		}
 	}
 
-	_, err = signing.IsSigned(ctx, to, l.keystoreURI, 0, false, l.client.AuthToken)
-	if err != nil {
-		sylog.Warningf("%v", err)
-		return ErrLibraryPullUnsigned
-	}
-
-	sylog.Infof("Download complete: %s\n", to)
 	return nil
+}
+
+func (l *Library) CheckSignature(ctx context.Context, filename string) (signing.SignatureType, error) {
+	return signing.IsSigned(ctx, filename, l.keystoreURI, l.client.AuthToken)
 }
 
 // pullAndVerify downloads library image and verifies it by comparing checksum

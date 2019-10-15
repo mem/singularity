@@ -68,14 +68,15 @@ func LibraryPush(ctx context.Context, file, dest, authToken, libraryURI, keyServ
 
 	if !unauthenticated {
 		// check if the container is signed
-		imageSigned, err := signing.IsSigned(ctx, file, keyServerURL, 0, false, authToken)
+		sigType, err := signing.IsSigned(ctx, file, keyServerURL, authToken)
+
 		if err != nil {
 			// err will be: "unable to verify container: %v", err
 			sylog.Warningf("%v", err)
 		}
 
 		// if its not signed, print a warning
-		if !imageSigned {
+		if sigType == signing.NoSignature {
 			return ErrLibraryUnsigned
 		}
 	} else {

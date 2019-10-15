@@ -25,11 +25,27 @@ import (
 	"golang.org/x/crypto/openpgp/clearsign"
 )
 
-// ErrVerificationFail is the error when the verify fails
-var ErrVerificationFail = errors.New("verification failed")
+var (
+	// ErrVerificationFail is the error when the verify fails
+	ErrVerificationFail         = errors.New("verification failed")
+	errNotFound                 = errors.New("key does not exist in local, or remote keystore")
+	errNotFoundLocal            = errors.New("key not in local keyring")
+	ErrSystemPartitionNotSigned = errNoSignature{
+		kind: "system partition",
+		id:   0,
+	}
+)
 
-var errNotFound = errors.New("key does not exist in local, or remote keystore")
-var errNotFoundLocal = errors.New("key not in local keyring")
+type errNoSignature struct {
+	kind string
+	id   uint32
+}
+
+var _ error = errNoSignature{}
+
+func (e errNoSignature) Error() string {
+	return fmt.Sprintf("no signature found for %s with ID %d", e.kind, e.id)
+}
 
 // Key is for json formatting.
 type Key struct {
@@ -50,6 +66,15 @@ type KeyList struct {
 	Signatures int
 	SignerKeys []*Key
 }
+
+type SignatureType int
+
+const (
+	InvalidSignature SignatureType = iota
+	NoSignature
+	LocalSignature
+	RemoteSignature
+)
 
 // computeHashStr generates a hash from data object(s) and generates a string
 // to be stored in the signature block.
@@ -283,7 +308,7 @@ func getSigsPrimPart(fimg *sif.FileImage) (sigs []*sif.Descriptor, descr []*sif.
 
 	sigs, _, err = fimg.GetLinkedDescrsByType(descr[0].ID, sif.DataSignature)
 	if err != nil {
-		return nil, nil, fmt.Errorf("no signatures found for system partition")
+		return nil, nil, ErrSystemPartitionNotSigned
 	}
 
 	return
@@ -300,7 +325,7 @@ func getSigsDescr(fimg *sif.FileImage, id uint32) (sigs []*sif.Descriptor, descr
 
 	sigs, _, err = fimg.GetLinkedDescrsByType(id, sif.DataSignature)
 	if err != nil {
-		return nil, nil, fmt.Errorf("no signatures found for id %v", id)
+		return nil, nil, errNoSignature{kind: "descriptor", id: id}
 	}
 
 	return
@@ -324,7 +349,7 @@ func getSigsGroup(fimg *sif.FileImage, id uint32) (sigs []*sif.Descriptor, descr
 	}
 	sigs, _, err = fimg.GetFromDescr(search)
 	if err != nil {
-		return nil, nil, fmt.Errorf("no signatures found for groupid %v", id)
+		return nil, nil, errNoSignature{kind: "group", id: id}
 	}
 
 	return
@@ -345,17 +370,21 @@ func getSigsForSelection(fimg *sif.FileImage, id uint32, isGroup bool) (sigs []*
 // will return true if the container is signed. Also returns a error
 // if one occures, eg. "the container is not signed", or "container is
 // signed by a unknown signer".
-func IsSigned(ctx context.Context, cpath, keyServerURI string, id uint32, isGroup bool, authToken string) (bool, error) {
-	_, noLocalKey, err := Verify(ctx, cpath, keyServerURI, id, isGroup, authToken, false, false)
-	if err != nil {
-		return false, fmt.Errorf("unable to verify container %s: %s", cpath, err)
+func IsSigned(ctx context.Context, cpath, keyServerURI string, authToken string) (SignatureType, error) {
+	_, noLocalKey, err := Verify(ctx, cpath, keyServerURI, 0, false, authToken, false, false)
+	switch {
+	case IsNoSignatureError(err):
+		return NoSignature, nil
+
+	case err != nil:
+		return InvalidSignature, fmt.Errorf("unable to verify container: %s", err)
+
+	case noLocalKey:
+		return RemoteSignature, nil
+
+	default:
+		return LocalSignature, nil
 	}
-	if noLocalKey {
-		sylog.Warningf("Container might not be trusted; run 'singularity verify %s' to show who signed it", cpath)
-	} else {
-		sylog.Infof("Container is trusted - run 'singularity key list' to list your trusted keys")
-	}
-	return true, nil
 }
 
 // Verify takes a container path (cpath), and look for a verification block
@@ -378,7 +407,14 @@ func Verify(ctx context.Context, cpath, keyServiceURI string, id uint32, isGroup
 
 	// get all signature blocks (signatures) for ID/GroupID selected (descr) from SIF file
 	signatures, descr, err := getSigsForSelection(&fimg, id, isGroup)
-	if err != nil {
+	switch {
+	case err == nil:
+		// keep going
+
+	case IsNoSignatureError(err):
+		return "", false, err
+
+	default:
 		return "", false, fmt.Errorf("error while searching for signature blocks: %s", err)
 	}
 
@@ -584,4 +620,19 @@ func GetSignEntitiesFp(fp *os.File) ([]string, error) {
 	}
 
 	return getSignEntities(&fimg)
+}
+
+// IsNoSignatureError returns true if the error represents a missing
+// signature error, false otherwise.
+func IsNoSignatureError(err error) bool {
+	switch err.(type) {
+	case nil:
+		return false
+
+	case errNoSignature:
+		return true
+
+	default:
+		return false
+	}
 }
