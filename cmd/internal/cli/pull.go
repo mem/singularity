@@ -167,17 +167,11 @@ var PullCmd = &cobra.Command{
 	Example:               docs.PullExample,
 }
 
-func pullRun(cmd *cobra.Command, args []string) {
+func setupContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	signalCh := make(chan os.Signal)
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGKILL)
-
-	defer func() {
-		sylog.Debugf("Done. Cleaning up.")
-		signal.Stop(signalCh)
-		cancel()
-	}()
 
 	go func() {
 		select {
@@ -190,6 +184,17 @@ func pullRun(cmd *cobra.Command, args []string) {
 		}
 	}()
 
+	return ctx, func() {
+		sylog.Debugf("Done. Cleaning up.")
+		signal.Stop(signalCh)
+		cancel()
+	}
+}
+
+func pullRun(cmd *cobra.Command, args []string) {
+	ctx, cancel := setupContext()
+	defer cancel()
+
 	imgCache := getCacheHandle(cache.Config{Disable: disableCache})
 	if imgCache == nil {
 		sylog.Fatalf("Failed to create an image cache handle")
@@ -198,7 +203,8 @@ func pullRun(cmd *cobra.Command, args []string) {
 	pullFrom := args[len(args)-1]
 	transport, ref := uri.Split(pullFrom)
 	if ref == "" {
-		sylog.Fatalf("Bad URI %s", pullFrom)
+		sylog.Errorf("Bad URI %s", pullFrom)
+		return
 	}
 
 	pullTo := pullImageName
