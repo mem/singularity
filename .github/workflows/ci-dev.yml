@@ -29,7 +29,12 @@ jobs:
         GOROOT: '/usr/local/go-${{ matrix.go }}'
 
     steps:
-      - uses: actions/checkout@v1
+      - name: Add user
+        run: |
+          grep -q '^[^:]\+:[^:]\+:'$(id -u)':' /etc/passwd || sudo useradd --home-dir "$HOME" --uid $(id -u) --no-create-home runner
+
+      - name: Check out code
+        uses: actions/checkout@v1
 
       - name: Examine env
         run: |
