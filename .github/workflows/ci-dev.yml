@@ -35,8 +35,8 @@ jobs:
         run: |
           echo '========== env'
           env
-          echo '========== whoami'
-          whoami
+          echo '========== id'
+          id
           echo '========== pwd'
           pwd
           echo '========== ls -la'
@@ -70,9 +70,26 @@ jobs:
 
       - name: Examine env
         run: |
+          echo '========== env'
+          env
+          echo '========== id'
+          id
+          echo '========== id 1001'
+          id 1001 || true
+          echo '========== pwd'
+          pwd
+          echo '========== ls -la'
+          ls -la
+          echo '========== ls -la ${{ runner.workspace }}'
+          ls -la ${{ runner.workspace }} || true
+          echo '========== ls -la $HOME'
+          ls -la $HOME || true
+          echo '========== ls -la /mnt'
+          ls -la /mnt || true
+          echo '========== df'
+          df
+          echo '========== mount'
+          mount
           set -x
-          ls -l '${{ runner.workspace }}'
-          ls -l '${{ runner.temp }}'
-          ls -l /mnt
           df
           mount
