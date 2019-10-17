@@ -80,6 +80,11 @@ jobs:
     displayName: 'Initial setup'
 
   - script:
+      scripts/check-go.mod
+    workingDirectory: '$(modulePath)'
+    displayName: 'Check go.mod'
+
+  - script:
       ./mconfig -v --prefix='$(tmpInstallDir)'
     workingDirectory: '$(modulePath)'
     displayName: 'Configure'
