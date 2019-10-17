@@ -20,6 +20,8 @@ jobs:
     container:
       image: sylabsio/buildenv:${{ matrix.container }}-201910101738
       options: --privileged
+      volumes:
+        - ${{ runner.workspace }}:${{ runner.workspace }}
       env:
         GO111MODULE: 'on'
         GOVERSION: ${{ matrix.go }}
@@ -31,8 +33,9 @@ jobs:
       - name: Examine env
         run: |
           set -x
-          ls -lR '${{ runner.workspace }}'
-          ls -lR '${{ runner.temp }}'
+          ls -l '${{ runner.workspace }}' || true
+          ls -l '${{ runner.temp }}' || true
+          ls -l /mnt || true
           df
           mount
 
@@ -47,7 +50,8 @@ jobs:
       - name: Examine env
         run: |
           set -x
-          ls -lR '${{ runner.workspace }}'
-          ls -lR '${{ runner.temp }}'
+          ls -l '${{ runner.workspace }}'
+          ls -l '${{ runner.temp }}'
+          ls -l /mnt
           df
           mount
