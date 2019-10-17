@@ -22,7 +22,7 @@ jobs:
 
     container:
       image: sylabsio/buildenv:${{ matrix.container }}-201910101738
-      options: --privileged --user runner
+      options: --privileged --user 1001
       env:
         GO111MODULE: 'on'
         GOVERSION: ${{ matrix.go }}
