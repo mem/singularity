@@ -1,0 +1,53 @@
+name: Continuous Integration - Dev
+
+on:
+  pull_request:
+    branches:
+      - github_actions
+
+jobs:
+  build_and_test:
+    name: build and test
+
+    strategy:
+      matrix:
+        os: [ubuntu-16.04]
+        container: [ubuntu-16.04]
+        go: [1.13]
+
+    runs-on: ${{ matrix.os }}
+
+    container:
+      image: sylabsio/buildenv:${{ matrix.container }}-201910101738
+      options: --privileged
+      env:
+        GO111MODULE: 'on'
+        GOVERSION: ${{ matrix.go }}
+        GOROOT: '/usr/local/go-${{ matrix.go }}'
+
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Examine env
+        run: |
+          set -x
+          ls -lR '${{ runner.workspace }}'
+          ls -lR '${{ runner.temp }}'
+          df
+          mount
+
+  examine_vm:
+    name: Examine VM
+
+    runs-on: ubuntu-16.04
+
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Examine env
+        run: |
+          set -x
+          ls -lR '${{ runner.workspace }}'
+          ls -lR '${{ runner.temp }}'
+          df
+          mount
