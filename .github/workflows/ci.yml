@@ -1,0 +1,80 @@
+name: Continuous Integration
+on:
+  pull_request:
+    branches:
+      - github_actions
+env:
+  GOBIN: '$(GOPATH)/bin' # Go binaries path
+  GOCACHE: '$(system.defaultWorkingDirectory)/cache' # Go build cache
+  GOPATH: '$(system.defaultWorkingDirectory)/gopath' # Go workspace path
+  modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)' # Path to the module's code
+  tmpInstallDir: '$(modulePath)/tmp' # Path to temporary installation directory
+
+jobs:
+  build_and_test:
+    name: build and test
+
+    strategy:
+      matrix:
+        os: [ubuntu-16.04, ubuntu-18.04]
+        container: [ubuntu-16.04, ubuntu-18.04, centos-6, centos-7, centos-8]
+        go: [1.13]
+
+    runs-on: ${{ matrix.os }}
+
+    container:
+      image: sylabsio/buildenv:${{ matrix.container }}-201910101738
+      options: --privileged
+      env:
+        GO111MODULE: 'on'
+        GOVERSION: ${{ matrix.go }}
+        GOROOT: '/usr/local/${{ matrix.go }}'
+        PATH: '$(GOROOT)/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: 'Initial setup'
+        run: |
+          test -e /etc/os-release && cat /etc/os-release
+          mkdir -p '$(GOBIN)'
+          mkdir -p '$(GOPATH)/pkg'
+          mkdir -p '$(modulePath)'
+          shopt -s extglob
+          shopt -s dotglob
+          mv !(gopath) '$(modulePath)'
+          echo '##vso[task.prependpath]$(GOBIN)'
+          echo '##vso[task.prependpath]$(GOROOT)/bin'
+          echo '##vso[task.prependpath]$(tmpInstallDir)'
+          # the / directory is owned by vsts by default, fix this
+          sudo chown root:root /
+          # /tmp needs to be something that can be used as a overlayfs lowerdir
+          sudo mount -t tmpfs tmpfs /tmp
+
+      - name: 'Check go.mod'
+        run: |
+          scripts/check-go.mod
+
+      - name: 'Configure'
+        run: |
+          ./mconfig -v --prefix='$(tmpInstallDir)'
+
+      - name: 'Code generation'
+        run: |
+          make -C builddir codegen
+
+      - name: 'Lint'
+        run: |
+          make -C builddir check
+
+      - name: 'Build'
+        run: |
+          make -C builddir
+
+      - name: 'Install'
+        run: |
+          sudo make -C builddir install
+
+      - name: 'Unit test'
+        run: |
+          make -C builddir unit-test JUNIT_OUTPUT=yes
