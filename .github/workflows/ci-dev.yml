@@ -27,6 +27,7 @@ jobs:
         GO111MODULE: 'on'
         GOVERSION: ${{ matrix.go }}
         GOROOT: '/usr/local/go-${{ matrix.go }}'
+        PATH: '/usr/local/go-${{ matrix.go}}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 
     steps:
       - name: Check out code
@@ -61,36 +62,38 @@ jobs:
           echo '========== mount'
           mount
 
-  examine_vm:
-    name: Examine VM
-
-    runs-on: ubuntu-16.04
-
-    steps:
-      - uses: actions/checkout@v1
-
-      - name: Examine env
+      - name: 'Initial setup'
         run: |
-          echo '========== env'
-          env
-          echo '========== id'
-          id
-          echo '========== id 1001'
-          id 1001 || true
-          echo '========== pwd'
-          pwd
-          echo '========== ls -la'
-          ls -la
-          echo '========== ls -la ${{ runner.workspace }}'
-          ls -la ${{ runner.workspace }} || true
-          echo '========== ls -la $HOME'
-          ls -la $HOME || true
-          echo '========== ls -la /mnt'
-          ls -la /mnt || true
-          echo '========== df'
-          df
-          echo '========== mount'
-          mount
-          set -x
-          df
-          mount
+          test -e /etc/os-release && cat /etc/os-release
+          shopt -s extglob
+          shopt -s dotglob
+          # /tmp needs to be something that can be used as a overlayfs lowerdir
+          sudo mount -t tmpfs tmpfs /tmp
+
+      - name: 'Check go.mod'
+        run: |
+          scripts/check-go.mod
+
+      - name: 'Configure'
+        run: |
+          ./mconfig -v --prefix="${RUNNER_TEMP}/s"
+
+      - name: 'Code generation'
+        run: |
+          make -C builddir codegen
+
+      - name: 'Lint'
+        run: |
+          make -C builddir check
+
+      - name: 'Build'
+        run: |
+          make -C builddir
+
+      - name: 'Install'
+        run: |
+          sudo make -C builddir install
+
+      - name: 'Unit test'
+        run: |
+          make -C builddir unit-test JUNIT_OUTPUT=yes
