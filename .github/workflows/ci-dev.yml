@@ -61,12 +61,12 @@ jobs:
           df
           echo '========== mount'
           mount
+          echo '========== ps auxf'
+          ps auxf
 
       - name: 'Initial setup'
         run: |
           test -e /etc/os-release && cat /etc/os-release
-          shopt -s extglob
-          shopt -s dotglob
           # /tmp needs to be something that can be used as a overlayfs lowerdir
           sudo mount -t tmpfs tmpfs /tmp
 
