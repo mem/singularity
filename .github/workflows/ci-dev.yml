@@ -34,10 +34,21 @@ jobs:
       - name: Examine env
         run: |
           set -x
+          pwd
+          echo ========== CWD
+          ls -l
+          echo ========== /github/workspace
           ls -l /github/workspace || true
+          echo ========== /github/home
           ls -l /github/home || true
+          echo ========== /github/workflow
           ls -l /github/workflow || true
+          echo ========== /mnt
           ls -l /mnt || true
+          echo ========== /usr/local
+          ls -l /usr/local/
+          echo ========== /__w/
+          ls -l /__w/
           df
           mount
 
