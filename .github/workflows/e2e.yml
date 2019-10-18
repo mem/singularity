@@ -67,6 +67,8 @@ jobs:
       - name: 'Initial setup'
         run: |
           test -e /etc/os-release && cat /etc/os-release
+          sudo mkdir -p "$(grep ^$(id -un): /etc/passwd | cut -d: -f6)"
+          sudo chown $(id -un):$(id -gn) "$(grep ^$(id -un): /etc/passwd | cut -d: -f6)"
           # /tmp needs to be something that can be used as a overlayfs lowerdir
           sudo mount -t tmpfs tmpfs /tmp
 
