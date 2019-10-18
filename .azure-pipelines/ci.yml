@@ -77,6 +77,8 @@ jobs:
       sudo chown root:root /
       # /tmp needs to be something that can be used as a overlayfs lowerdir
       sudo mount -t tmpfs tmpfs /tmp
+      sudo chown $(id -un):$(id -gn) ~
+      sudo chmod u+rwX ~
     displayName: 'Initial setup'
 
   - script:
