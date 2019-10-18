@@ -71,6 +71,11 @@ jobs:
           sudo chown $(id -un):$(id -gn) "$(grep ^$(id -un): /etc/passwd | cut -d: -f6)"
           # /tmp needs to be something that can be used as a overlayfs lowerdir
           sudo mount -t tmpfs tmpfs /tmp
+          # TODO(mem): this is a little hacky, as it's not taking into
+          # account whether the existing mappings overlap with the
+          # specified range.
+          grep -q "^$(id -un):" /etc/subuid || echo "$(id -un):900000:65536" | sudo tee -a /etc/subuid
+          grep -q "^$(id -un):" /etc/subgid || echo "$(id -un):900000:65536" | sudo tee -a /etc/subgid
 
       - name: 'Check go.mod'
         run: |
