@@ -23,7 +23,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     container:
-      image: sylabsio/buildenv:${{ matrix.container }}-201910101738
+      image: sylabsio/buildenv:${{ matrix.container }}-201910212028
       options: --privileged
       env:
         GO111MODULE: 'on'
