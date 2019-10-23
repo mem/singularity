@@ -10,10 +10,10 @@ trigger:
 resources:
   containers:
   - container: ubuntu_1604
-    image: sylabsio/buildenv:ubuntu-16.04-201910172051
+    image: sylabsio/buildenv:ubuntu-16.04-201910212028
     options: --privileged
   - container: centos_7
-    image: sylabsio/buildenv:centos-7-201910172051
+    image: sylabsio/buildenv:centos-7-201910212028
     options: --privileged
 
 jobs:
